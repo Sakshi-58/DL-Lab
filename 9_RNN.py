@@ -80,17 +80,6 @@ plt.show()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 import yfinance as yf
@@ -101,6 +90,7 @@ from tensorflow.keras.layers import SimpleRNN, Dense, Dropout
 
 # ── INSTALL & LOAD REAL STOCK DATA ───────────────────────────
 # !pip install yfinance
+# python -m pip install yfinance
 
 # Download Apple stock data (2020 to 2024)
 df = yf.download('AAPL', start='2020-01-01', end='2024-01-01')
