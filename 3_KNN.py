@@ -67,55 +67,67 @@ print("Accuracy (%):", accuracy * 100)
 
 
 import pandas as pd
+from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 
-# Load data
-data = pd.read_csv("iris.csv")
+# Load preloaded dataset
+iris = load_iris()
+
+# Create DataFrame (optional, for display like CSV)
+data = pd.DataFrame(iris.data, columns=iris.feature_names)
+data["Species"] = iris.target
+data["Species"] = data["Species"].map(lambda x: iris.target_names[x])
+
 print(data.head())
 print(data.isnull().sum())
 
-# Fixed: drop 'Id' column, use column names directly
-X = data[['SepalLengthCm', 'SepalWidthCm', 'PetalLengthCm', 'PetalWidthCm']]
-y = data['Species']                                  # Fixed: use column name not index
+# Features and target
+X = iris.data
+y = iris.target   # use numeric labels for ML (best practice)
 
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=1)
+    X, y, test_size=0.3, random_state=1
+)
 
 # Feature scaling
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
-X_test  = scaler.transform(X_test)
+X_test = scaler.transform(X_test)
 
 # KNN Model
 knn = KNeighborsClassifier(n_neighbors=3)
 knn.fit(X_train, y_train)
 y_pred = knn.predict(X_test)
 
+# Convert labels back to names for printing
+target_names = iris.target_names
+
 # Print Correct Predictions
 print("\n── Correct Predictions ──")
 correct = 0
 for i in range(len(y_test)):
-    if y_test.iloc[i] == y_pred[i]:
+    if y_test[i] == y_pred[i]:
         correct += 1
-        print(f"  Sample {i+1:3} | Actual: {y_test.iloc[i]:<25} Predicted: {y_pred[i]}")
+        print(f"  Sample {i+1:3} | Actual: {target_names[y_test[i]]:<15} Predicted: {target_names[y_pred[i]]}")
 
 # Print Wrong Predictions
 print("\n── Wrong Predictions ──")
 wrong = 0
 for i in range(len(y_test)):
-    if y_test.iloc[i] != y_pred[i]:
+    if y_test[i] != y_pred[i]:
         wrong += 1
-        print(f"  Sample {i+1:3} | Actual: {y_test.iloc[i]:<25} Predicted: {y_pred[i]}")
+        print(f"  Sample {i+1:3} | Actual: {target_names[y_test[i]]:<15} Predicted: {target_names[y_pred[i]]}")
 
 if wrong == 0:
     print("  No wrong predictions!")
 
 # Accuracy
 accuracy = accuracy_score(y_test, y_pred)
+
 print(f"\n── Results ──")
 print(f"  Total Samples : {len(y_test)}")
 print(f"  Correct       : {correct}")
