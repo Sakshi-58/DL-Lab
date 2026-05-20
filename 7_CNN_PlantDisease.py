@@ -117,71 +117,116 @@ for image, label in test_data.take(1):
 
 
 
-import tensorflow as tf
-import tensorflow_datasets as tfds
-import matplotlib.pyplot as plt
+# ── STEP 1: Install required libraries ───────────────────────
+# Run this in terminal first:
+# pip install tensorflow kaggle matplotlib seaborn scikit-learn
+
+# ── STEP 2: Download dataset ──────────────────────────────────
+# Run this in terminal:
+# pip install kaggle
+# Place kaggle.json in C:/Users/YourName/.kaggle/ (Windows)
+# kaggle datasets download -d abdallahalidev/plantvillage-dataset
+# unzip plantvillage-dataset.zip
+
+import os
 import numpy as np
+import matplotlib.pyplot as plt
 import seaborn as sns
+import tensorflow as tf
+from tensorflow import keras
 from sklearn.metrics import confusion_matrix, classification_report
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-# ── LOAD DATASET ──────────────────────────────────────────────
-(dataset_train, dataset_test), dataset_info = tfds.load(
-    "plant_village",
-    split=["train[:80%]", "train[80%:]"],
-    as_supervised=True,
-    with_info=True
-)
+# ── DATASET PATH ──────────────────────────────────────────────
+# Change this to where you unzipped the dataset
+DATASET_PATH = "plantvillage dataset/color"        # Update this path
+IMG_SIZE     = 128
+BATCH_SIZE   = 32
 
-num_classes = dataset_info.features["label"].num_classes
-class_names = dataset_info.features["label"].names
-
-print("Number of classes:", num_classes)
-print("Example classes  :", class_names[:5])
+# Check if path exists
+if not os.path.exists(DATASET_PATH):
+    print("ERROR: Dataset path not found!")
+    print("Please update DATASET_PATH to your dataset location")
+else:
+    print("Dataset found at:", DATASET_PATH)
+    print("Number of classes:", len(os.listdir(DATASET_PATH)))
 
 # ── a. DATA PRE-PROCESSING ────────────────────────────────────
-IMG_SIZE = 128
 
-def preprocess(image, label):
-    image = tf.image.resize(image, (IMG_SIZE, IMG_SIZE))
-    image = image / 255.0                            # Normalize 0-1
-    return image, label
+# ImageDataGenerator handles loading + augmentation
+train_datagen = ImageDataGenerator(
+    rescale=1./255,                                # Normalize 0-1
+    validation_split=0.2,                          # 80-20 split
+    rotation_range=15,
+    horizontal_flip=True,
+    zoom_range=0.1
+)
 
-train_data = dataset_train.map(preprocess).batch(32).prefetch(tf.data.AUTOTUNE)
-test_data  = dataset_test.map(preprocess).batch(32).prefetch(tf.data.AUTOTUNE)
+test_datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2
+)
+
+# Load training data
+train_data = train_datagen.flow_from_directory(
+    DATASET_PATH,
+    target_size=(IMG_SIZE, IMG_SIZE),
+    batch_size=BATCH_SIZE,
+    class_mode='sparse',
+    subset='training',                             # Training split
+    seed=42
+)
+
+# Load test data
+test_data = test_datagen.flow_from_directory(
+    DATASET_PATH,
+    target_size=(IMG_SIZE, IMG_SIZE),
+    batch_size=BATCH_SIZE,
+    class_mode='sparse',
+    subset='validation',                           # Validation split
+    seed=42
+)
+
+# Class info
+class_names = list(train_data.class_indices.keys())
+num_classes = len(class_names)
+print(f"\nTotal Classes  : {num_classes}")
+print(f"Train Samples  : {train_data.samples}")
+print(f"Test Samples   : {test_data.samples}")
 
 # Show sample images
-plt.figure(figsize=(10, 8))
-for i, (image, label) in enumerate(train_data.take(1)):
-    for j in range(9):
-        plt.subplot(3, 3, j+1)
-        plt.imshow(image[j])
-        plt.title(class_names[label[j]], fontsize=7)
-        plt.axis("off")
+plt.figure(figsize=(12, 6))
+images, labels = next(train_data)
+for i in range(9):
+    plt.subplot(3, 3, i+1)
+    plt.imshow(images[i])
+    plt.title(class_names[int(labels[i])][:20], fontsize=7)
+    plt.axis("off")
 plt.suptitle("Sample Plant Disease Images")
 plt.tight_layout()
 plt.show()
 
 # ── b. DEFINE & TRAIN MODEL ───────────────────────────────────
-model = tf.keras.models.Sequential([
+model = keras.models.Sequential([
 
     # First Conv Block
-    tf.keras.layers.Conv2D(32, (3,3), activation='relu', input_shape=(128, 128, 3)),
-    tf.keras.layers.MaxPooling2D(2, 2),
+    keras.layers.Conv2D(32, (3,3), activation='relu',
+                        input_shape=(IMG_SIZE, IMG_SIZE, 3)),
+    keras.layers.MaxPooling2D(2, 2),
 
     # Second Conv Block
-    tf.keras.layers.Conv2D(64, (3,3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2, 2),
+    keras.layers.Conv2D(64, (3,3), activation='relu'),
+    keras.layers.MaxPooling2D(2, 2),
 
     # Third Conv Block
-    tf.keras.layers.Conv2D(128, (3,3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2, 2),
+    keras.layers.Conv2D(128, (3,3), activation='relu'),
+    keras.layers.MaxPooling2D(2, 2),
 
-    tf.keras.layers.Flatten(),
+    keras.layers.Flatten(),
+    keras.layers.Dense(128, activation='relu'),
+    keras.layers.Dropout(0.5),
 
-    tf.keras.layers.Dense(128, activation='relu'),
-    tf.keras.layers.Dropout(0.5),                   # Fixed: added to reduce overfitting
-
-    tf.keras.layers.Dense(num_classes, activation='softmax')
+    keras.layers.Dense(num_classes, activation='softmax')
 ])
 
 model.summary()
@@ -195,7 +240,7 @@ model.compile(
 # Train
 history = model.fit(
     train_data,
-    epochs=3,
+    epochs=10,
     validation_data=test_data
 )
 
@@ -204,24 +249,23 @@ loss, accuracy = model.evaluate(test_data)
 print(f"\nTest Loss     : {loss:.4f}")
 print(f"Test Accuracy : {accuracy * 100:.2f}%")
 
-# Accuracy Plot
+# Accuracy & Loss Plot
 plt.figure(figsize=(12, 4))
 
 plt.subplot(1, 2, 1)
 plt.plot(history.history['accuracy'],     label='Train Accuracy')
 plt.plot(history.history['val_accuracy'], label='Val Accuracy')
 plt.title("Model Accuracy")
-plt.xlabel("Epoch")
+plt.xlabel("Epochs")
 plt.ylabel("Accuracy")
 plt.legend()
 plt.grid(True)
 
-# Loss Plot                                         # Fixed: was missing
 plt.subplot(1, 2, 2)
 plt.plot(history.history['loss'],     label='Train Loss')
 plt.plot(history.history['val_loss'], label='Val Loss')
 plt.title("Model Loss")
-plt.xlabel("Epoch")
+plt.xlabel("Epochs")
 plt.ylabel("Loss")
 plt.legend()
 plt.grid(True)
@@ -229,23 +273,24 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-# ── CONFUSION MATRIX ──────────────────────────────────────────  # Fixed: was missing
+# ── CONFUSION MATRIX ──────────────────────────────────────────
 print("\nGenerating Confusion Matrix...")
 
 y_true, y_pred = [], []
 
-for image, label in test_data:
-    preds = model.predict(image, verbose=0)
+for i in range(len(test_data)):
+    images, labels = next(test_data)
+    preds = model.predict(images, verbose=0)
     y_pred.extend(np.argmax(preds, axis=1))
-    y_true.extend(label.numpy())
+    y_true.extend(labels.astype(int))
 
 y_true = np.array(y_true)
 y_pred = np.array(y_pred)
 
-# Plot Confusion Matrix (top 10 classes only for readability)
-cm         = confusion_matrix(y_true, y_pred)
-top_n      = 10
-cm_top     = cm[:top_n, :top_n]
+# Top 10 classes only for readability
+top_n  = 10
+cm     = confusion_matrix(y_true, y_pred)
+cm_top = cm[:top_n, :top_n]
 
 plt.figure(figsize=(10, 7))
 sns.heatmap(cm_top, annot=True, fmt='d', cmap='Blues',
@@ -255,32 +300,30 @@ plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.title("Confusion Matrix (Top 10 Classes)")
 plt.xticks(rotation=45, ha='right', fontsize=7)
-plt.yticks(rotation=0, fontsize=7)
+plt.yticks(rotation=0,  fontsize=7)
 plt.tight_layout()
 plt.show()
 
 # Classification Report
-print("\nClassification Report (first 10 classes):")
+print("\nClassification Report (Top 10 classes):")
 print(classification_report(y_true, y_pred,
       target_names=class_names, labels=list(range(top_n))))
 
 # ── SAMPLE PREDICTIONS ────────────────────────────────────────
-print("\n── Sample Predictions ──")
 plt.figure(figsize=(12, 5))
+images, labels = next(test_data)
+preds          = model.predict(images, verbose=0)
+pred_classes   = np.argmax(preds, axis=1)
 
-for image, label in test_data.take(1):
-    preds           = model.predict(image, verbose=0)
-    predicted_class = np.argmax(preds, axis=1)
-
-    for j in range(10):
-        plt.subplot(2, 5, j+1)
-        plt.imshow(image[j])
-        actual    = class_names[label[j]]
-        predicted = class_names[predicted_class[j]]
-        color     = 'green' if actual == predicted else 'red'  # Green=correct Red=wrong
-        plt.title(f"A: {actual[:10]}\nP: {predicted[:10]}",
-                  fontsize=6, color=color)
-        plt.axis("off")
+for j in range(10):
+    plt.subplot(2, 5, j+1)
+    plt.imshow(images[j])
+    actual    = class_names[int(labels[j])]
+    predicted = class_names[pred_classes[j]]
+    color     = 'green' if actual == predicted else 'red'
+    plt.title(f"A:{actual[:12]}\nP:{predicted[:12]}",
+              fontsize=6, color=color)
+    plt.axis("off")
 
 plt.suptitle("Predictions (Green=Correct, Red=Wrong)")
 plt.tight_layout()
